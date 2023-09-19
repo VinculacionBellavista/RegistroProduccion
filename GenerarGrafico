@@ -1,0 +1,184 @@
+var FolderId = 'INGRESA EL ID DE TU CARPETA DE GOOGLE DRIVE';
+var SheetId = "INGRESA EL ID DE TU GOOGLE SHEET";
+
+function doGet() {
+  //---------------------------------------------------------------------//
+  // Buscar volumenes en rango de fechas
+  //---------------------------------------------------------------------//
+  var ss = SpreadsheetApp.openById(SheetId);
+  var formsHoja = ss.getSheetByName('Forms');
+  var produccionHoja = ss.getSheetByName('Produccion');
+
+  // Obtener el último valor de la columna B (Fecha inicio)
+  var fechaInicio = formsHoja.getRange(formsHoja.getLastRow(), 2).getValue();
+  
+  // Obtener el último valor de la columna C (Fecha fin)
+  var fechaFin = formsHoja.getRange(formsHoja.getLastRow(), 3).getValue();
+
+  // Obtener el último valor de la columna D (Arete) en la hoja Graficos
+  var arete = formsHoja.getRange(formsHoja.getLastRow(), 4).getValue();
+
+  // Ajustar a GMT-05 (agregar 24 horas para evitar la resta de un día)
+  var fechaInicio = new Date(formsHoja.getRange(formsHoja.getLastRow(), 2).getValue());
+  fechaInicio.setHours(fechaInicio.getHours() - 24); // Agregar 24 horas
+  var fechaFin = new Date(formsHoja.getRange(formsHoja.getLastRow(), 3).getValue());
+  fechaFin.setHours(fechaFin.getHours() + 24); // Agregar 24 horas
+
+  // Buscar el valor de "arete" en la primera fila de la hoja Produccion
+  var primeraFilaProduccion = produccionHoja.getRange(1, 1, 1, produccionHoja.getLastColumn()).getValues()[0];
+  var columnaArete = primeraFilaProduccion.indexOf(arete);
+
+  var resultado = buscarVol(fechaInicio, fechaFin, columnaArete);
+
+  // Verificar si buscarVol ha devuelto un mensaje de error
+  if (resultado && resultado.mensaje) {
+    return ContentService.createTextOutput(resultado.mensaje);
+  }
+
+  var fechas = resultado.fechas;
+  var volumenes = resultado.volumenes;
+
+  //---------------------------------------------------------------------//
+  // Pasar datos a la hoja Chart
+  //---------------------------------------------------------------------//
+
+  var chartHoja = ss.getSheetByName('Chart'); // Intenta obtener la hoja 'Chart'
+
+  // Limpiar los valores existentes en la hoja 'Chart' si existe
+  if (chartHoja) {
+    chartHoja.clearContents();
+  } else {
+    // Si la hoja 'Chart' no existe, crear una nueva hoja 'Chart'
+    chartHoja = ss.insertSheet('Chart');
+  }
+
+  // Agregar encabezados en las columnas
+  chartHoja.getRange(1, 1).setValue('Fecha');
+  chartHoja.getRange(1, 2).setValue('Volumen');
+
+  // Escribir los datos en la hoja 'Chart' en dos columnas, comenzando desde la fila 2
+  var data = [];
+  for (var i = 0; i < fechas.length; i++) {
+    data.push([fechas[i], volumenes[i]]);
+  }
+  chartHoja.getRange(2, 1, data.length, data[0].length).setValues(data);
+
+  //---------------------------------------------------------------------//
+  // Generar Grafico en hoja Chart
+  //---------------------------------------------------------------------//
+
+  genGrafico();
+
+  //---------------------------------------------------------------------//
+  // Exportar a Google Drive
+  //---------------------------------------------------------------------//
+
+  // Obtener el gráfico
+  var grafico = chartHoja.getCharts()[0]; // Suponemos que solo hay un gráfico en la hoja "Chart"
+  // Obtener la imagen del gráfico en formato PNG
+  var imagenBlob = grafico.getAs('image/png');
+  // Obtener la carpeta de Google Drive
+  var carpetaDrive = DriveApp.getFolderById(FolderId);
+  // Buscar si ya existe un archivo con el nombre "Prod.png" en la carpeta
+  var archivos = carpetaDrive.getFilesByName("Prod.png");
+
+  while (archivos.hasNext()) {
+    // Si ya existe un archivo con ese nombre, eliminarlo definitivamente
+    var archivoExistente = archivos.next();
+    Drive.Files.remove(archivoExistente.getId()); // Eliminar definitivamente
+  }
+
+  // Crear un nuevo archivo con el nombre "Prod.png"
+  var imagenBlob = grafico.getAs('image/png');
+  var archivoImagen = carpetaDrive.createFile(imagenBlob.setName('Prod.png'));
+
+  // Obtener el ID del archivo creado
+  var imagenId = archivoImagen.getId();
+  // Devolver el ID de la imagen creada
+  return ContentService.createTextOutput(imagenId);
+}
+
+function buscarVol(fechaInicio, fechaFin, arete) {
+  var ss = SpreadsheetApp.openById(SheetId);
+  var hoja = ss.getSheetByName('Produccion');
+  
+  // Verificar si hay datos en la hoja 'Produccion'
+  var ultimaFila = hoja.getLastRow();
+  if (ultimaFila < 2) {
+    // No hay suficientes filas de datos
+    Logger.log("No hay datos en la hoja 'Produccion'.");
+    return {
+      fechas: [],
+      volumenes: [],
+      mensaje: "No hay datos en la hoja 'Produccion'."
+    };
+  }
+
+  var datos = hoja.getRange(2, 1, ultimaFila - 1, hoja.getLastColumn()).getValues(); // Obtener datos desde la fila 2
+  
+  var resultados = {
+    fechas: [],
+    volumenes: []
+  };
+  
+  var formatoFecha = "yyyy-MM-dd"; // Formato de fecha deseado
+  
+  for (var i = 0; i < datos.length; i++) {
+    var fecha = new Date(datos[i][0]);
+    if (fecha >= fechaInicio && fecha <= fechaFin) {
+      var volumen = datos[i][arete];
+      // Agregar un día a la fecha
+      fecha.setDate(fecha.getDate() + 1);
+      // Formatear la fecha como "YYYY-MM-DD"
+      var fechaFormateada = Utilities.formatDate(fecha, "GMT-05:00", formatoFecha);
+      resultados.fechas.push(fechaFormateada);
+      resultados.volumenes.push(volumen);
+    }
+  }
+  
+  return resultados;
+}
+
+function genGrafico() {
+  var hoja = SpreadsheetApp.openById(SheetId).getSheetByName("Chart"); // Nombre de la hoja
+
+  var datos = hoja.getRange("A:A").getValues();
+  var valores = hoja.getRange("B:B").getValues();
+
+  // Elimina las filas vacías al final de la columna
+  var ultimaFila = hoja.getLastRow();
+  for (var i = ultimaFila; i >= 1; i--) {
+    if (datos[i-1][0] == "" || valores[i-1][0] == "") {
+      hoja.deleteRow(i);
+    } else {
+      break;
+    }
+  }
+
+  var existingChart = hoja.getCharts().find(function(chart) {
+    return chart.getOptions().get("title") === "Producción";
+  });
+
+  if (existingChart) {
+    // Si existe un gráfico con el título especificado, elimínalo
+    hoja.removeChart(existingChart);
+  }
+
+  var grafico = hoja.newChart().asAreaChart()
+    .setTitle('Producción')
+    .setPosition(2, 4, 2, 2); // Ajusta la posición a partir de D2 (columna 4, fila 2)
+
+  // Cambiar la inclinación de las etiquetas en el eje X
+  var hAxisOptions = {
+    slantedText: true,
+    slantedTextAngle: 30
+  };
+  grafico = grafico.setOption('hAxis', hAxisOptions);
+
+  grafico = grafico.setOption('pointSize', 8); // Agregar puntos a cada punto de datos
+
+  grafico = grafico.addRange(hoja.getRange("A:A"));
+  grafico = grafico.addRange(hoja.getRange("B:B"));
+
+  hoja.insertChart(grafico.build());
+}
