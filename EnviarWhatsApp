@@ -1,0 +1,34 @@
+//Firebase ID Library 1hguuh4Zx72XVC1Zldm_vTtcUUKUA6iBUOoGnJUWLfqDWx5WlOJHqYkrt
+var FirebaseURL = 'INGRESA LA URL DE TU FIREBASE PRODUCCION';
+
+function doGet() {
+  var fechaActual = Utilities.formatDate(new Date(), 'GMT-05:00', 'yyyy-MM-dd');
+  var baseDatos = FirebaseApp.getDatabaseByUrl(FirebaseURL);
+  var referencia = baseDatos.getData(fechaActual);
+  
+  var encabezados = ['Arete', 'Puesto', 'Volumen'];
+  var longitudMaxima = encabezados.reduce((max, header) => Math.max(max, header.length), 0);
+  var lineaSeparadora = '-'.repeat(longitudMaxima * encabezados.length + (encabezados.length - 1) * 2) + '%0A'; // Línea de guiones
+  
+  var matrizString = encabezados.map(header => header.padEnd(longitudMaxima).replace(/ /g, '%20')).join('|') + '%0A'; // Encabezados alineado
+  matrizString += lineaSeparadora;
+  
+  var totalVolumen = 0;
+  
+  for (var l in referencia) {
+    var fila = [
+      referencia[l].Arete.replace(/"/g, ""),
+      referencia[l].Puesto.replace(/"/g, ""),
+      referencia[l].Volumen.replace(/"/g, "")
+    ];
+    matrizString += fila.map(value => value.padEnd(longitudMaxima).replace(/ /g, '%20')).join('|') + '%0A'; // Agrega la fila alineada al string con separadores y salto de línea
+    totalVolumen += parseFloat(referencia[l].Volumen.replace(/"/g, "")); // Suma los valores de Volumen para calcular el total
+  }
+  
+  matrizString += lineaSeparadora;
+  matrizString += `Total:%20%20${totalVolumen}L%0A`; // Agrega el total al string
+  matrizString += `Fecha:%20${fechaActual}`; // Agrega la fecha al string
+  
+  Logger.log(matrizString); // Muestra el string en el registro (ventana "Ver" -> "Registro de ejecución" en Apps Script Editor).
+  return ContentService.createTextOutput(matrizString);
+}
