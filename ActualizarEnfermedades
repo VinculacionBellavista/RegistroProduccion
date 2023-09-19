@@ -1,0 +1,70 @@
+//Firebase ID Library 1hguuh4Zx72XVC1Zldm_vTtcUUKUA6iBUOoGnJUWLfqDWx5WlOJHqYkrt
+
+// Define las variables globales
+var FirebaseUrl = 'INGRESA LA URL DE TU FIREBASE ENFERMEDADES';
+var SheetId = 'INGRESA EL ID DE TU GOOGLE SHEET';
+
+function doGet() {
+  // Conectar a Firebase
+  var baseDatos = FirebaseApp.getDatabaseByUrl(FirebaseUrl);
+  
+  // Obtener una referencia a la hoja de Google Sheets
+  var sheetName = 'Enfermedades'; // Nombre de la hoja donde deseas exportar los datos
+  var spreadsheet = SpreadsheetApp.openById(SheetId);
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  // Crear la hoja si no existe
+  if (sheet === null) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  } else {
+    // Limpiar la hoja de cálculo si existe
+    sheet.clear();
+  }
+  
+  // Obtener los datos de Firebase
+  var data = baseDatos.getData();
+  
+  // Escribir los datos en la hoja de cálculo en el orden especificado
+  var headerRow = ['IdAnimal', 'Enfermedad', 'Sintomas', 'Fecha', 'IdVet', 'NameVet', 'Observaciones'];
+  sheet.appendRow(headerRow);
+  
+  for (var animal in data) {
+    for (var enfermedad in data[animal]) {
+      var rowData = [
+        animal,
+        enfermedad,
+        data[animal][enfermedad].Sintomas.replace(/"/g, ''), // Eliminar comillas dobles
+        data[animal][enfermedad].Fecha.replace(/"/g, ''), // Eliminar comillas dobles
+        data[animal][enfermedad].IdVet.replace(/"/g, ''), // Eliminar comillas dobles
+        data[animal][enfermedad].NameVet.replace(/"/g, ''), // Eliminar comillas dobles
+        data[animal][enfermedad].Observaciones.replace(/"/g, '') // Eliminar comillas dobles
+      ];
+      
+      // Reemplazar celdas vacías con "N/A"
+      for (var i = 0; i < rowData.length; i++) {
+        if (rowData[i] === "") {
+          rowData[i] = "N/A";
+        }
+      }
+      
+      sheet.appendRow(rowData);
+    }
+  }
+  
+  // Alinear celdas a la izquierda
+  var numRows = sheet.getLastRow();
+  var numCols = sheet.getLastColumn();
+  if (numRows >= 2) {
+    var range = sheet.getRange(2, 1, numRows - 1, numCols); // Excluir la fila de encabezado
+    range.setHorizontalAlignment("left");
+  } else {
+    Logger.log('No existen datos en la base de datos.');
+  }
+
+  // Cambiar la primera fila por las cabeceras deseadas
+  var headerRowValues = ["ID ANIMAL", "ENFERMEDAD", "SINTOMAS", "FECHA", "ID VET", "NOMBRE VET", "OBSERVACIONES"];
+  sheet.getRange(1, 1, 1, headerRowValues.length).setValues([headerRowValues]);
+
+  // Notificar que la exportación se ha completado
+  Logger.log('Exportación de datos completada.');
+}
