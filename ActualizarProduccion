@@ -1,0 +1,79 @@
+var FirebaseUrl = "INGRESA LA URL DE TU FIREBASE PRODUCCION";
+var SheetId = "INGRESA EL ID DE TU GOOGLE SHEET";
+
+function doGet() {
+  var spreadsheet = SpreadsheetApp.openById(SheetId);
+  
+  // Obtener la hoja "Produccion" o crearla si no existe
+  var sheet = spreadsheet.getSheetByName("Produccion");
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet("Produccion");
+  }
+  
+  var response = UrlFetchApp.fetch(FirebaseUrl + ".json");
+  var data = response.getContentText();
+  var jsonData = JSON.parse(data);
+  
+  // Crear un objeto para almacenar los datos organizados y los totales
+  var organizedData = {};
+  var totalByDate = {};
+  
+  // Procesar los datos de Firebase y organizarlos en el objeto
+  for (var date in jsonData) {
+    totalByDate[date] = 0;
+    for (var element in jsonData[date]) {
+      var arete = jsonData[date][element]["Arete"].replace(/"/g, ""); // Eliminar comillas dobles
+      var volumen = parseFloat(jsonData[date][element]["Volumen"].replace(/"/g, "")) || 0; // Eliminar comillas dobles y convertir a número
+      
+      if (!organizedData[date]) {
+        organizedData[date] = {};
+      }
+      
+      organizedData[date][arete] = volumen;
+      totalByDate[date] += volumen;
+    }
+  }
+  
+  // Convertir el objeto organizado en una matriz
+  var dates = Object.keys(organizedData);
+  var aretes = [...new Set(Object.values(organizedData).map(obj => Object.keys(obj)).flat())];
+  
+  var matrix = [];
+  matrix.push(['', ...aretes, 'Total']);
+
+  var totalVolume = 0; // Variable para almacenar el volumen total actual
+  
+  for (var i = 0; i < dates.length; i++) {
+    var row = [dates[i]];
+    for (var j = 0; j < aretes.length; j++) {
+      row.push(organizedData[dates[i]][aretes[j]] || 0);
+    }
+    row.push(totalByDate[dates[i]]);
+    matrix.push(row);
+    totalVolume = totalByDate[dates[i]];
+  }
+  
+  // Obtener las dimensiones de la matriz
+  var numRows = matrix.length;
+  var numColumns = matrix[0].length;
+  
+  // Limpiar la hoja de cálculo y luego colocar la matriz actualizada
+  sheet.clear();
+  var range = sheet.getRange(1, 1, numRows, numColumns);
+  range.setValues(matrix);
+
+  //---------------------------------------------------------------------//
+  // Exportar a App Inventor volTotal y Aretes
+  //---------------------------------------------------------------------//
+  // Obtener la primera fila de la matriz (que contiene los encabezados de columna)
+  var firstRow = matrix[0];
+
+  // Convertir la fila en una cadena separada por comas
+  var firstRowAsString = firstRow.join(',').replace(/^,/, '');
+
+  // Agregar totalVolume al principio de la cadena con un espacio en blanco
+  firstRowAsString = totalVolume + ' ' + firstRowAsString;
+
+  
+  return ContentService.createTextOutput(firstRowAsString);
+}
