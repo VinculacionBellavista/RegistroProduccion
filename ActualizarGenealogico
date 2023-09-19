@@ -1,0 +1,88 @@
+//Firebase ID Library 1hguuh4Zx72XVC1Zldm_vTtcUUKUA6iBUOoGnJUWLfqDWx5WlOJHqYkrt
+var FirebaseUrl = "INGRESA LA URL DE TU FIREBASE GENEALOGICO";
+var SheetId = "INGRESA EL ID DE TU GOOGLE SHEET";
+
+function doGet() {
+  var database = FirebaseApp.getDatabaseByUrl(FirebaseUrl);
+  var spreadsheet = SpreadsheetApp.openById(SheetId);
+  
+  var sheetName = "Genealogico";
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  var oldHeaders = ["id", "estado", "nombre", "raza", "f_nacimiento", "p_nacimiento", "fecundado", "sexo", "tipo", "f_estado", "p_estado", "precio", "comprador"];
+  var newHeaders = ["ID", "ESTADO", "NOMBRE", "RAZA", "FECHA NACIMIENTO", "PESO NACIMIENTO", "FECUNDACION", "SEXO", "TIPO", "FECHA ESTADO", "PESO ESTADO", "PRECIO", "COMPRADOR"];
+  
+  if (sheet === null) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  } else {
+    // Elimina todos los datos existentes en la hoja
+    sheet.clearContents();
+  }
+  
+  var data = database.getData("/");
+  var rowIndex = 1;
+  
+  sheet.getRange(rowIndex, 1, 1, oldHeaders.length).setValues([oldHeaders]);
+  rowIndex++;
+  
+  for (var key in data) {
+    var rowData = [];
+    var item = data[key];
+    for (var i = 0; i < oldHeaders.length; i++) {
+      var value = item[oldHeaders[i]];
+      if (typeof value === "string" && value.startsWith('"') && value.endsWith('"')) {
+        value = value.substring(1, value.length - 1);
+      }
+      rowData.push(value || "");
+    }
+    sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+    rowIndex++;
+  }
+  
+  // Establece los nuevos encabezados después de agregar los datos
+  sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+    // Verifica que haya al menos una fila de datos antes de llamar a formatCells()
+  if (sheet.getLastRow() > 1) {
+    formatCells();
+  }
+  adjustAlignment();
+}
+
+function formatCells() {
+  var sheetName = "Genealogico";
+  
+  var spreadsheet = SpreadsheetApp.openById(SheetId);
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  // Elimina el formato de color de todas las celdas
+  sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).setBackground(null);
+  
+  var dataRange = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1);
+  var dataValues = dataRange.getValues();
+  
+  var statesToColors = {
+    "ACTIVO": "#00FF00",   // Verde
+    "DIFUNTO": "#FF0000",  // Rojo
+    "VENTA": "#FFFF00"     // Amarillo
+  };
+  
+  for (var i = 0; i < dataValues.length; i++) {
+    var state = dataValues[i][0];  // Estado está en la segunda columna (índice 1)
+    var color = statesToColors[state];
+    
+    if (color) {
+      sheet.getRange(i + 2, 2).setBackground(color);
+    }
+  }
+}
+
+function adjustAlignment() {
+  var sheetName = "Genealogico";
+  
+  var spreadsheet = SpreadsheetApp.openById(SheetId);
+  var sheet = spreadsheet.getSheetByName(sheetName);
+
+  // Alinea los valores al lado izquierdo
+  var dataRange = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
+  dataRange.setHorizontalAlignment("left");
+}
